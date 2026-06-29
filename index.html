@@ -1013,52 +1013,79 @@ function renderRiwayatView(g) {
 }
 
 var riwayatFilterState = {};
+var riwayatPage = {};
+var ROWS_PER_PAGE = 50;
+
 function applyRiwayatFilter(g) {
   var mode = document.getElementById(g+'-filter-mode').value;
   var extraEl = document.getElementById(g+'-filter-extra');
   var today = nowDateStr();
+  riwayatPage[g] = 1; // reset ke halaman 1 tiap ganti filter
+
   if (mode==='all') {
     extraEl.innerHTML = '';
     riwayatFilterState[g] = function(r){ return true; };
+    renderRiwayatTable(g);
   } else if (mode==='today') {
     extraEl.innerHTML = '';
     riwayatFilterState[g] = function(r){ return r.date===today; };
+    renderRiwayatTable(g);
   } else if (mode==='single') {
-    extraEl.innerHTML = '<input type="date" id="'+g+'-fd1" value="'+today+'" onchange="applyRiwayatFilter(\''+g+'\')" style="margin-left:6px">';
+    extraEl.innerHTML = '<input type="date" id="'+g+'-fd1" value="'+today+'" style="margin-left:6px">';
     setTimeout(function(){
       var el2 = document.getElementById(g+'-fd1');
-      if (el2) {
-        var v = el2.value||today;
-        riwayatFilterState[g] = function(r){ return r.date===v; };
+      if (!el2) return;
+      // Set filter dari nilai awal
+      var v = el2.value||today;
+      riwayatFilterState[g] = function(r){ return r.date===v; };
+      renderRiwayatTable(g);
+      // Listen perubahan manual
+      el2.addEventListener('change', function(){
+        var val = el2.value||today;
+        riwayatPage[g] = 1;
+        riwayatFilterState[g] = function(r){ return r.date===val; };
         renderRiwayatTable(g);
-      }
-    },10);
-    return;
+      });
+    }, 50);
   } else if (mode==='range') {
-    extraEl.innerHTML = '<input type="date" id="'+g+'-fd1" value="'+today+'" onchange="applyRiwayatFilter(\''+g+'\')" style="margin-left:6px"> <span style="font-size:12px;color:var(--text2)">s/d</span> <input type="date" id="'+g+'-fd2" value="'+today+'" onchange="applyRiwayatFilter(\''+g+'\')" style="margin-left:4px">';
+    extraEl.innerHTML = '<input type="date" id="'+g+'-fd1" value="'+today+'" style="margin-left:6px"> <span style="font-size:12px;color:var(--text2)">s/d</span> <input type="date" id="'+g+'-fd2" value="'+today+'" style="margin-left:4px">';
     setTimeout(function(){
       var e1=document.getElementById(g+'-fd1'), e2=document.getElementById(g+'-fd2');
-      if (e1&&e2) {
+      if (!e1||!e2) return;
+      function updateRange(){
         var v1=e1.value||today, v2=e2.value||today;
+        riwayatPage[g] = 1;
         riwayatFilterState[g] = function(r){ return r.date>=v1&&r.date<=v2; };
         renderRiwayatTable(g);
       }
-    },10);
-    return;
+      updateRange();
+      e1.addEventListener('change', updateRange);
+      e2.addEventListener('change', updateRange);
+    }, 50);
   } else if (mode==='month') {
     var ym = today.slice(0,7);
-    extraEl.innerHTML = '<input type="month" id="'+g+'-fm" value="'+ym+'" onchange="applyRiwayatFilter(\''+g+'\')" style="margin-left:6px;height:32px;font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)">';
+    extraEl.innerHTML = '<input type="month" id="'+g+'-fm" value="'+ym+'" style="margin-left:6px;height:32px;font-size:12px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)">';
     setTimeout(function(){
       var em=document.getElementById(g+'-fm');
-      if (em) {
+      if (!em) return;
+      function updateMonth(){
         var mv=em.value||ym;
+        riwayatPage[g] = 1;
         riwayatFilterState[g] = function(r){ return (r.date||'').slice(0,7)===mv; };
         renderRiwayatTable(g);
       }
-    },10);
-    return;
+      updateMonth();
+      em.addEventListener('change', updateMonth);
+    }, 50);
   }
+}
+
+function goRiwayatPage(g, page) {
+  riwayatPage[g] = page;
   renderRiwayatTable(g);
+  // scroll ke atas tabel
+  var el = document.getElementById(g+'-riwayat-body');
+  if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 function renderRiwayatTable(g) {
@@ -1069,14 +1096,50 @@ function renderRiwayatTable(g) {
   if (!filtered.length) {
     bodyEl.innerHTML = '<div class="empty">Tidak ada transaksi pada periode ini.</div>'; return;
   }
+
+  var page = riwayatPage[g] || 1;
+  var totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+  if (page > totalPages) page = totalPages;
+  var start = (page-1)*ROWS_PER_PAGE;
+  var pageRows = filtered.slice(start, start+ROWS_PER_PAGE);
+
   var html = '<div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Produk</th><th>SKU</th><th>Tipe</th><th>Keterangan</th><th>Jml</th><th>Sisa</th><th></th></tr></thead><tbody>';
-  filtered.slice(0,300).forEach(function(r){
+  pageRows.forEach(function(r){
     var badge = r.tipe==='keluar'?'<span class="badge badge-low">Keluar</span>':r.tipe==='transfer'?'<span class="badge badge-transfer">Transfer</span>':'<span class="badge badge-in">Masuk</span>';
     var editBtn = r.tipe!=='transfer' ? '<button class="btn btn-sm btn-blue" onclick="openEditRiwayat(\''+g+'\','+r.id+')" style="padding:3px 8px;font-size:11px">Edit</button>' : '';
     html += '<tr><td style="font-size:12px;color:var(--text2);white-space:nowrap">'+esc(r.waktu)+'</td><td style="font-weight:500">'+esc(r.nama)+'</td><td class="td-mono">'+esc(r.sku)+'</td><td>'+badge+'</td><td style="font-size:12px;color:var(--text2)">'+(r.keterangan?esc(r.keterangan):'-')+'</td><td style="font-weight:600">'+(r.tipe==='keluar'||r.tipe==='transfer'?'−':'+')+''+r.jumlah+'</td><td>'+r.sisa+'</td><td>'+editBtn+'</td></tr>';
   });
-  if (filtered.length>300) html += '<tr><td colspan="6" style="text-align:center;font-size:12px;color:var(--text3);padding:8px">Menampilkan 300 dari '+filtered.length+' transaksi.</td></tr>';
   html += '</tbody></table></div>';
+
+  // Pagination
+  if (totalPages > 1) {
+    html += '<div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-top:14px;flex-wrap:wrap">';
+    // Prev
+    html += '<button class="btn btn-sm" onclick="goRiwayatPage(\''+g+'\','+(page-1)+')" '+(page===1?'disabled style="opacity:.4"':'')+'style="padding:5px 10px">&lt;</button>';
+    // Page numbers
+    var pages = [];
+    if (totalPages <= 7) {
+      for (var i=1;i<=totalPages;i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (page > 3) pages.push('...');
+      for (var i=Math.max(2,page-1);i<=Math.min(totalPages-1,page+1);i++) pages.push(i);
+      if (page < totalPages-2) pages.push('...');
+      pages.push(totalPages);
+    }
+    pages.forEach(function(p){
+      if (p==='...') {
+        html += '<span style="padding:5px 8px;color:var(--text3)">…</span>';
+      } else {
+        html += '<button class="btn btn-sm" onclick="goRiwayatPage(\''+g+'\','+p+')" style="padding:5px 10px;min-width:36px'+(p===page?';background:var(--text);color:var(--bg)':'')+'">'+(p)+'</button>';
+      }
+    });
+    // Next
+    html += '<button class="btn btn-sm" onclick="goRiwayatPage(\''+g+'\','+(page+1)+')" '+(page===totalPages?'disabled style="opacity:.4"':'')+'style="padding:5px 10px">&gt;</button>';
+    html += '<span style="font-size:12px;color:var(--text3);margin-left:6px">'+start+1+'–'+Math.min(start+ROWS_PER_PAGE,filtered.length)+' dari '+filtered.length+'</span>';
+    html += '</div>';
+  }
+
   bodyEl.innerHTML = html;
 }
 
