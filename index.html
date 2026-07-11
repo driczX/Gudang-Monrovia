@@ -449,6 +449,13 @@ tr:hover td{background:var(--surface2)}
         </button>
       </div>
     </div>
+    <div class="form-group" style="margin-top:10px;margin-bottom:4px">
+      <label class="lbl">Tanggal & Jam <span style="font-weight:400;color:var(--text3)">(bisa diubah untuk backdate)</span></label>
+      <div style="display:flex;gap:6px">
+        <input type="date" id="scan-confirm-date" style="flex:1;height:36px;font-size:13px">
+        <input type="time" id="scan-confirm-time" style="width:100px;height:36px;font-size:13px">
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('scan-confirm');scanConfirmCtx=null;">Batal</button>
       <button class="btn btn-primary" onclick="konfirmasiScan()" id="scan-confirm-btn">Keluar</button>
@@ -798,6 +805,12 @@ function doScan(g) {
   sel.innerHTML = opts.map(function(o){return'<option value="'+esc(o)+'">'+esc(o)+'</option>';}).join('');
   document.getElementById('scan-confirm-qty').value = 1;
   updateScanConfirmBtn();
+  // Set default datetime to now
+  var now = new Date();
+  var dateStr = now.toISOString().slice(0,10);
+  var timeStr = now.toTimeString().slice(0,5);
+  document.getElementById('scan-confirm-date').value = dateStr;
+  document.getElementById('scan-confirm-time').value = timeStr;
   document.getElementById('modal-scan-confirm').style.display='flex';
   setTimeout(function(){ document.getElementById('scan-confirm-qty').select(); },50);
 }
@@ -818,15 +831,22 @@ function konfirmasiScan() {
   var g = scanConfirmCtx.gudang;
   var p = scanConfirmCtx.produk;
   var ket = document.getElementById('scan-confirm-ket').value||'';
+  // Get custom datetime
+  var dateVal = document.getElementById('scan-confirm-date').value || nowDateStr();
+  var timeVal = document.getElementById('scan-confirm-time').value || '00:00';
+  // Format waktu untuk display: "09 Jul 2026, 14.30"
+  var dtParts = dateVal.split('-');
+  var bulan = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  var waktuStr = dtParts[2]+' '+bulan[parseInt(dtParts[1])-1]+' '+dtParts[0]+', '+timeVal.replace(':','.');
   if (qty > p.qty) { toast('Jumlah melebihi stok ('+p.qty+').','err'); return; }
   p.qty -= qty;
   scanCountToday[g] = (scanCountToday[g]||0)+1;
-  db[g].riwayat.unshift({waktu:nowStr(),date:nowDateStr(),nama:p.nama,sku:p.sku,tipe:'keluar',keterangan:ket,jumlah:qty,sisa:p.qty,id:Date.now()});
+  db[g].riwayat.unshift({waktu:waktuStr,date:dateVal,nama:p.nama,sku:p.sku,tipe:'keluar',keterangan:ket,jumlah:qty,sisa:p.qty,id:Date.now()});
   saveDB();
   closeModal('scan-confirm');
   var area = document.getElementById(g+'-scan-result');
   var sb = p.qty===0?'<span class="badge badge-empty">Stok habis!</span>':p.qty<=p.min?'<span class="badge badge-low">Stok menipis</span>':'<span class="badge badge-ok">Stok aman</span>';
-  area.innerHTML = '<div class="scan-result"><div class="result-card"><div class="result-name">'+esc(p.nama)+'</div><div class="result-sku">'+esc(p.sku)+'</div><div class="result-qty">'+p.qty.toLocaleString('id-ID')+' <span style="font-size:16px;font-weight:400;color:var(--text2)">unit tersisa</span></div>'+sb+(ket?'<div style="font-size:12px;color:var(--text2);margin-top:6px">'+esc(ket)+'</div>':'')+'</div></div>';
+  area.innerHTML = '<div class="scan-result"><div class="result-card"><div class="result-name">'+esc(p.nama)+'</div><div class="result-sku">'+esc(p.sku)+'</div><div class="result-qty">'+p.qty.toLocaleString('id-ID')+' <span style="font-size:16px;font-weight:400;color:var(--text2)">unit tersisa</span></div>'+sb+(ket?'<div style="font-size:12px;color:var(--text2);margin-top:6px">'+esc(ket)+'</div>':'')+'<div style="font-size:11px;color:var(--text3);margin-top:4px">'+esc(waktuStr)+'</div></div></div>';
   if (p.qty===0) toast('Stok '+p.nama+' habis!','err');
   else if (p.qty<=p.min) toast('⚠ Stok '+p.nama+' menipis: '+p.qty,'warn');
   else toast('✓ −'+qty+' unit '+p.nama+(ket?' | '+ket:'')+' | Sisa: '+p.qty);
