@@ -469,6 +469,13 @@ tr:hover td{background:var(--surface2)}
     <div class="modal-title">Edit transaksi</div>
     <div style="font-size:12px;color:var(--text2);background:var(--surface2);padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:14px" id="edit-rwyt-info"></div>
     <div class="form-group" style="margin-bottom:12px">
+      <label class="lbl">Tanggal & Jam</label>
+      <div style="display:flex;gap:6px">
+        <input type="date" id="edit-rwyt-date" style="flex:1;height:36px;font-size:13px">
+        <input type="time" id="edit-rwyt-time" style="width:100px;height:36px;font-size:13px">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
       <label class="lbl">Jumlah</label>
       <input type="number" id="edit-rwyt-qty" min="1" placeholder="0">
     </div>
@@ -1514,12 +1521,21 @@ function openEditRiwayat(g, id) {
   editRiwayatCtx = {gudang:g, id:id};
   document.getElementById('edit-rwyt-info').textContent = r.nama+' ('+r.sku+') — '+r.waktu;
   document.getElementById('edit-rwyt-qty').value = r.jumlah;
+  // Populate date & time from stored date field
+  var dateVal = r.date || nowDateStr();
+  document.getElementById('edit-rwyt-date').value = dateVal;
+  // Extract time from waktu string e.g. "23 Jul 2026, 11.25" → "11:25"
+  var timeVal = '00:00';
+  if (r.waktu) {
+    var m = r.waktu.match(/(\d{2})\.(\d{2})$/);
+    if (m) timeVal = m[1]+':'+m[2];
+  }
+  document.getElementById('edit-rwyt-time').value = timeVal;
   // populate keterangan options
   var tipe = r.tipe==='masuk'?'masuk':'keluar';
   var opts = db.keterangan[tipe]||[];
   var sel = document.getElementById('edit-rwyt-ket');
   sel.innerHTML = opts.map(function(o){return'<option value="'+esc(o)+'"'+(o===r.keterangan?' selected':'')+'>'+esc(o)+'</option>';}).join('');
-  // also set current value if not in list
   if (r.keterangan && opts.indexOf(r.keterangan)===-1) {
     sel.innerHTML += '<option value="'+esc(r.keterangan)+'" selected>'+esc(r.keterangan)+'</option>';
   }
@@ -1533,6 +1549,8 @@ function konfirmasiEditRiwayat() {
   if (!r) return;
   var newQty = parseInt(document.getElementById('edit-rwyt-qty').value);
   var newKet = document.getElementById('edit-rwyt-ket').value;
+  var newDate = document.getElementById('edit-rwyt-date').value || r.date || nowDateStr();
+  var newTime = document.getElementById('edit-rwyt-time').value || '00:00';
   if (!newQty || newQty <= 0) { toast('Jumlah harus lebih dari 0.','err'); return; }
   // Adjust produk stok based on qty diff
   var p = db[g].produk.find(function(x){return x.sku===r.sku;});
@@ -1540,20 +1558,23 @@ function konfirmasiEditRiwayat() {
     var oldQty = r.jumlah;
     var diff = newQty - oldQty;
     if (r.tipe==='keluar'||r.tipe==='transfer') {
-      // was taking from stock — if qty increases, take more; if decreases, return some
       p.qty -= diff;
-      if (p.qty < 0) { toast('Stok tidak cukup untuk perubahan ini (stok saat ini: '+(p.qty+diff)+').','err'); p.qty += diff; return; }
+      if (p.qty < 0) { toast('Stok tidak cukup (stok saat ini: '+(p.qty+diff)+').','err'); p.qty += diff; return; }
     } else {
-      // was adding to stock
       p.qty += diff;
       if (p.qty < 0) { toast('Tidak bisa mengurangi stok di bawah 0.','err'); p.qty -= diff; return; }
     }
-    // update sisa on this riwayat entry
     r.sisa = r.sisa - r.jumlah + newQty;
     if (r.tipe==='keluar'||r.tipe==='transfer') r.sisa = r.sisa + r.jumlah - newQty;
   }
+  // Format waktu baru
+  var dtParts = newDate.split('-');
+  var bulan = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  var waktuBaru = dtParts[2]+' '+bulan[parseInt(dtParts[1])-1]+' '+dtParts[0]+', '+newTime.replace(':','.');
   r.jumlah = newQty;
   r.keterangan = newKet;
+  r.date = newDate;
+  r.waktu = waktuBaru;
   saveDB();
   closeModal('edit-riwayat');
   editRiwayatCtx = null;
