@@ -1020,7 +1020,7 @@ function konfirmasiModalStok() {
 // ===================== RIWAYAT VIEW =====================
 function renderRiwayatView(g) {
   var el = document.getElementById(g+'-riwayat-view');
-  var html = '<div class="date-filter">';
+  var html = '<div class="date-filter" style="flex-wrap:wrap">';
   html += '<label>Filter:</label>';
   html += '<select id="'+g+'-filter-mode" onchange="applyRiwayatFilter(\''+g+'\')">';
   html += '<option value="all">Semua</option>';
@@ -1030,6 +1030,7 @@ function renderRiwayatView(g) {
   html += '<option value="month">Per bulan</option>';
   html += '</select>';
   html += '<span id="'+g+'-filter-extra"></span>';
+  html += '<div style="margin-left:auto"><input type="search" id="'+g+'-riwayat-search" placeholder="🔍 Cari SKU / produk..." style="width:220px;height:32px;font-size:13px;padding:0 10px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);color:var(--text)" oninput="riwayatPage[\''+g+'\']=1;renderRiwayatTable(\''+g+'\')" /></div>';
   html += '</div>';
   html += '<div id="'+g+'-riwayat-header" class="section-head"><span class="section-title" id="'+g+'-riwayat-count">0 transaksi</span>';
   html += '<button class="btn btn-sm" onclick="exportRiwayatFiltered(\''+g+'\')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</button>';
@@ -1117,7 +1118,13 @@ function goRiwayatPage(g, page) {
 
 function renderRiwayatTable(g) {
   var fn = riwayatFilterState[g]||function(){return true;};
-  var filtered = db[g].riwayat.filter(fn);
+  var searchEl = document.getElementById(g+'-riwayat-search');
+  var keyword = searchEl ? searchEl.value.toLowerCase().trim() : '';
+  var filtered = db[g].riwayat.filter(function(r){
+    if (!fn(r)) return false;
+    if (!keyword) return true;
+    return (r.sku||'').toLowerCase().includes(keyword) || (r.nama||'').toLowerCase().includes(keyword);
+  });
   document.getElementById(g+'-riwayat-count').textContent = filtered.length+' transaksi';
   var bodyEl = document.getElementById(g+'-riwayat-body');
   if (!filtered.length) {
